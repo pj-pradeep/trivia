@@ -41,6 +41,25 @@ class TriviaTestCase(unittest.TestCase):
         self.assertEqual(data['success'], True)
         self.assertEqual(data['total_categories'], len(data['categories']))
 
+    
+    def test_get_paginated_questions(self):
+        response = self.client().get('/api/v1/questions')
+        data = json.loads(response.data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data['success'], True)
+        self.assertTrue(len(data['questions']) > 0)
+        self.assertEqual(data['totalQuestions'], 19)
+        self.assertTrue(len(data['categories']))
+
+    def test_404_get_paginated_questions_page_out_of_range(self):
+        response = self.client().get('api/v1/questions?page=1000')
+        data = json.loads(response.data)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(data['success'], False)
+
+    
 # Make the tests conveniently executable
 if __name__ == "__main__":
     unittest.main()

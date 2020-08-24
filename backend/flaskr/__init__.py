@@ -36,10 +36,11 @@ def create_app(test_config=None):
   @app.route('/api/v1/categories', methods=['GET'])
   def get_categories():
     print('Retrieving all categories')
-    categories = Category.query.all()
+    categories = Category.query.order_by(Category.type.asc()).all()
 
     if len(categories) == 0:
       abort(404)
+    
 
     return jsonify({
       'success': True,
@@ -78,9 +79,9 @@ def create_app(test_config=None):
     return jsonify({
       'success': True,
       'questions': current_questions,
-      'totalQuestions': len(questions),
+      'total_questions': len(questions),
       'categories': {category.id: category.type for category in categories},
-      'currentCategory': None
+      'current_category': None
     })  
 
 
@@ -100,6 +101,28 @@ def create_app(test_config=None):
   TEST: When you click the trash icon next to a question, the question will be removed.
   This removal will persist in the database and when you refresh the page. 
   '''
+  @app.route('/api/v1/questions/<int:question_id>', methods=['DELETE'])
+  def delete_question(question_id):
+  
+    question = Question.query.get(question_id)
+
+    if question is None:
+      print(f'There is no question with id {question_id}. Nothing to delete')
+      abort(404)
+
+    try:
+      question.delete()
+
+      return jsonify({
+        "success": True,
+        "question_deleted": question.id
+      })
+    except Exception as e:
+      print(f'There was an exception trying to delete question {question_id}')
+      print(e)
+      abort(422)      
+      
+      
 
   '''
   @TODO: 
@@ -111,6 +134,41 @@ def create_app(test_config=None):
   the form will clear and the question will appear at the end of the last page
   of the questions list in the "List" tab.  
   '''
+  @app.route('/api/v1/questions', methods=['POST'])
+  def create_questions():
+    request_body = request.get_json()
+
+    if not request_body:
+      print("There was not request body. Not a valid request")
+      abort(400)
+    
+    new_question = request_body.get('question', None)
+    new_answer = request_body.get('answer', None)
+    new_difficulty = request_body.get('difficulty', 1)
+    new_category = request_body.get('category', 1)
+
+    # we are defaulting difficulty and category to 1 if not available
+    if (new_question is None or new_answer is None):
+      abort(422)
+
+    try:
+      question_to_add = Question(
+        question = new_question,
+        answer = new_answer,
+        category = new_category,
+        difficulty = new_difficulty
+      )
+
+      question_to_add.insert()
+
+      return jsonify({
+        "success": True,
+        "created": question_to_add.id
+      })
+    except Exception as e:
+      print('There was an exception while adding new question')
+      print(e)
+      abort(422)
 
   '''
   @TODO: 
@@ -122,6 +180,37 @@ def create_app(test_config=None):
   only question that include that string within their question. 
   Try using the word "title" to start. 
   '''
+  @app.route('/api/v1/questions/search', methods=['POST'])
+  def search_questions():
+    request_body = request.get_json()
+
+    if not request_body:
+      print("There was not request body. Not a valid request")
+      abort(400)
+
+    search_str = request_body.get('searchTerm', None)
+    
+    if search_str is None:
+      print("There was not search string mentioned. Nothing to search")
+      abort(400)
+
+    questions = Question.query.filter(Question.question.ilike(f'%{search_str}%')).all()
+
+    total_questions = len(questions)
+
+    categories = Category.query.all()
+
+    if total_questions == 0:
+      abort(404)
+
+    return jsonify({
+      "success": True,
+      "questions": [question.format() for question in questions],
+      "total_questions": total_questions,
+      'categories': {category.id: category.type for category in categories},
+      "current_category": None
+    })
+
 
   '''
   @TODO: 
@@ -131,7 +220,21 @@ def create_app(test_config=None):
   categories in the left column will cause only questions of that 
   category to be shown. 
   '''
+  @app.route('/api/v1/categories/<int:category_id>/questions', methods=['GET'])
+  def get_questions_by_category(category_id):
+    questions_by_category = Question.query.filter(Question.category == category_id).all()
 
+    if (len(questions_by_category) == 0):
+      abort(404)
+
+    current_category = Category.query.filter(Category.id == category_id).first()
+
+    return jsonify({
+      'success': True,
+      'questions': [question.format() for question in questions_by_category],
+      'total_questions': len(Question.query.all()),
+      'current_category': {current_category.id: current_category.type}
+    })
 
   '''
   @TODO: 
@@ -144,6 +247,30 @@ def create_app(test_config=None):
   one question at a time is displayed, the user is allowed to answer
   and shown whether they were correct or not. 
   '''
+  @app.route('/api/v1/quizzes', methods=['POST'])
+  def play_trivia_quiz():
+    request_body = request.get_json()
+
+    if request_body is None:
+      abort(400)
+
+    previous_questions = request_body.get('previous_questions', None)
+    quiz_category = request_body.get('quiz_category', None)
+
+    if previous_questions is None or quiz_category is None:
+      abort(400)
+
+    if quiz_category['id'] == 0:
+      questions = Question.query.filter(Question.id.notin_((previous_questions))).all()
+    else:
+      questions = Question.query.filter(Question.category == quiz_category['id']).filter(Question.id.notin_((previous_questions))).all()
+
+    random_question = questions[random.randrange(0, len(questions), 1)]
+
+    return jsonify({
+      "success": True,
+      "question": random_question.format()
+    })
 
   '''
   @TODO: 
@@ -157,6 +284,22 @@ def create_app(test_config=None):
       "error": 404,
       "message": "Resource Not Found"
     }), 404
+
+  @app.errorhandler(400)
+  def bad_request(error):
+    return jsonify({
+      "success": False,
+      "error": 400,
+      "message": "Bad Request"
+    }), 400
+
+  @app.errorhandler(422)
+  def bad_request(error):
+    return jsonify({
+      "success": False,
+      "error": 422,
+      "message": "Unprocessable Error"
+    }), 422
   
   return app
 

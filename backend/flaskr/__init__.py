@@ -2,6 +2,7 @@ import os
 from flask import Flask, request, abort, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
+from sqlalchemy import func
 import random
 
 from models import setup_db, Question, Category
@@ -194,7 +195,9 @@ def create_app(test_config=None):
       print("There was not search string mentioned. Nothing to search")
       abort(400)
 
-    questions = Question.query.filter(Question.question.ilike(f'%{search_str}%')).all()
+    questions = Question.query \
+                  .filter(Question.question.ilike(f'%{search_str}%')) \
+                  .all()
 
     total_questions = len(questions)
 
@@ -222,7 +225,9 @@ def create_app(test_config=None):
   '''
   @app.route('/api/v1/categories/<int:category_id>/questions', methods=['GET'])
   def get_questions_by_category(category_id):
-    questions_by_category = Question.query.filter(Question.category == category_id).all()
+    questions_by_category = Question.query \
+                              .filter(Question.category == category_id) \
+                              .all()
 
     if (len(questions_by_category) == 0):
       abort(404)
@@ -260,16 +265,32 @@ def create_app(test_config=None):
     if previous_questions is None or quiz_category is None:
       abort(400)
 
-    if quiz_category['id'] == 0:
-      questions = Question.query.filter(Question.id.notin_((previous_questions))).all()
+    category_id = int(quiz_category['id'])
+
+    if category_id == 0:
+      # Query all the questions across all categories. Pick a random question not shown previously
+      random_question_to_show = Question.query \
+                                  .filter(Question.id.notin_((previous_questions))) \
+                                  .order_by(func.random()) \
+                                  .first()
     else:
-      questions = Question.query.filter(Question.category == quiz_category['id']).filter(Question.id.notin_((previous_questions))).all()
+      # Query all the questions in specific category. Pick a random question not shown previously
+      random_question_to_show = Question.query \
+                                  .filter(Question.category == quiz_category['id']) \
+                                  .filter(Question.id.notin_((previous_questions))) \
+                                  .order_by(func.random()) \
+                                  .first()
 
-    random_question = questions[random.randrange(0, len(questions), 1)]
+    if random_question_to_show is None:
+      # All questions have already been played, return success message to end the trivia game
+      return jsonify({
+        "success": True
+      })
 
+    # If there are questions to show, return success
     return jsonify({
       "success": True,
-      "question": random_question.format()
+      "question": random_question_to_show.format()
     })
 
   '''

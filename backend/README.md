@@ -39,7 +39,7 @@ With Postgres running, restore a database using the trivia.psql file provided. T
 From the backend folder in terminal run:
 ```bash
 createdb trivia
-psql -U postgres -trivia -a -f trivia.psql
+psql -U postgres -d trivia -a -f trivia.psql
 ```
 The above commands will create the initial seed data required for the trivia application to work.
 
@@ -411,6 +411,6 @@ To run the tests, run
 ```
 dropdb trivia_test
 createdb trivia_test
-psql trivia_test < trivia.psql
+psql -U postgres -d trivia_test -a -f trivia.psql
 python test_flaskr.py
 ```
